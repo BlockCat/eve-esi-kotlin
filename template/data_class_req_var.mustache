@@ -1,0 +1,5 @@
+{{#description}}
+    /* {{{description}}} */
+{{/description}}
+    @SerializedName("{{baseName}}")
+    val {{{name}}}: {{#isEnum}}{{&datatypeWithEnum}}{{/isEnum}}{{^isEnum}}{{{datatype}}}{{^required}}?{{/required}}{{/isEnum}}

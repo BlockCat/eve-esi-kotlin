@@ -1,0 +1,66 @@
+group 'catdock.org'
+version '1.0.0'
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '3.3'
+    distributionUrl = "https://services.gradle.org/distributions/gradle-$gradleVersion-all.zip"
+}
+
+buildscript {
+    ext.kotlin_version = '1.2.41'
+
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "gradle.plugin.org.hidetake:gradle-swagger-generator-plugin:2.9.0"
+    }
+}
+
+apply plugin: 'org.hidetake.swagger.generator'
+apply plugin: 'kotlin'
+
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+dependencies {
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"        
+    
+    // Retrofit library
+    compile 'com.google.code.gson:gson:2.8.2'
+    compile 'com.squareup.retrofit2:retrofit:2.3.0'
+    compile 'com.squareup.retrofit2:converter-gson:2.3.0'
+
+    swaggerCodegen 'io.swagger:swagger-codegen-cli:2.3.0'
+}
+
+swaggerSources {
+    esi {
+        inputFile = file("$projectDir/swagger.json")
+        code {
+            language = 'kotlin'
+            templateDir = file("$projectDir/template/")
+            outputDir = file("$buildDir/swagger-esi/")
+            components = ['models', 'apis']
+            dependsOn validation
+            additionalProperties = ['enumPropertyNaming': 'UPPERCASE', 'apiPackage': 'catdock.org.evenext.api', 'modelPackage': 'catdock.org.evenext.model']
+            rawOptions = [
+                    '--type-mappings', 'date=java.util.Date,Date=java.util.Date,date-time=java.util.Date,DateTime=java.util.Date',
+            ]
+        }
+    }
+}
+
+compileKotlin.dependsOn generateSwaggerCode
+
+sourceSets {
+    main {
+        java.srcDirs += "$buildDir/swagger-esi/src"
+    }
+}
