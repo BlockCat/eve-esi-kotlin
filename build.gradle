@@ -49,9 +49,22 @@ swaggerSources {
             language = 'generators.EsiGenerator'
             templateDir = file("$projectDir/template/")
             outputDir = file("$buildDir/swagger-esi/")
-            components = ['models', 'apis']
+            components = [
+                    models: true,
+                    apis: true,
+                    supportingFiles: [
+                            'ApiClient.kt',
+                            'AccessToken.kt',
+                            'ServiceBuilder.kt'
+                    ]
+            ]
             dependsOn validation
-            additionalProperties = ['enumPropertyNaming': 'UPPERCASE', 'apiPackage': 'catdock.org.evenext.api', 'modelPackage': 'catdock.org.evenext.model']
+            additionalProperties = [
+                    'enumPropertyNaming': 'UPPERCASE',
+                    'apiPackage': 'catdock.org.api',
+                    'modelPackage': 'catdock.org.model',
+                    'packageName': 'catdock.org'
+            ]
             rawOptions = [
                     '--type-mappings', 'date=java.util.Date,Date=java.util.Date,date-time=java.util.Date,DateTime=java.util.Date',
             ]
