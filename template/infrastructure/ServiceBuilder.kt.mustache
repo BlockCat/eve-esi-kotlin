@@ -1,0 +1,112 @@
+package {{packageName}}
+
+import java.io.IOException
+
+import okhttp3.Authenticator
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.Route
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+
+object ServiceGenerator {
+
+    val API_BASE_URL = "https://api.example.com"
+    val API_OAUTH_REDIRECT = "nl.jpelgrm.retrofit2oauthrefresh://oauth"
+
+    private var httpClient: OkHttpClient.Builder? = null
+
+    private var builder: Retrofit.Builder? = null
+
+    //private var mContext: Context? = null
+    private lateinit var mToken: AccessToken
+
+    fun <S> createService(serviceClass: Class<S>): S {
+        httpClient = OkHttpClient.Builder()
+        builder = Retrofit.Builder()
+                .baseUrl(API_BASE_URL)
+                .addConverterFactory(GsonConverterFactory.create())
+
+        val client = httpClient!!.build()
+        val retrofit = builder!!.client(client).build()
+        return retrofit.create(serviceClass)
+    }
+
+    fun <S> createService(serviceClass: Class<S>, accessToken: AccessToken?, onRefreshedToken: (AccessToken) -> Unit): S {
+        httpClient = OkHttpClient.Builder()
+        builder = Retrofit.Builder()
+                .baseUrl(API_BASE_URL)
+                .addConverterFactory(GsonConverterFactory.create())
+
+        if (accessToken != null) {
+            mToken = accessToken
+            httpClient!!.addInterceptor(object : Interceptor {
+                @Throws(IOException::class)
+                override fun intercept(chain: Interceptor.Chain): Response {
+                    val original = chain.request()
+
+                    val requestBuilder = original.newBuilder()
+                            .header("Accept", "application/json")
+                            .header("Content-type", "application/json")
+                            .header("Authorization",
+                                    accessToken.tokenType + " " + accessToken.accessToken)
+                            .method(original.method(), original.body())
+
+                    val request = requestBuilder.build()
+                    return chain.proceed(request)
+                }
+            })
+
+            httpClient!!.authenticator(object : Authenticator {
+                @Throws(IOException::class)
+                override fun authenticate(route: Route, response: Response): Request? {
+                    if (responseCount(response) >= 2) {
+                        // If both the original call and the call with refreshed token failed,
+                        // it will probably keep failing, so don't try again.
+                        return null
+                    }
+
+                    // We need a new client, since we don't want to make another call using our client with access token
+                    val tokenClient = createService(APIClient::class.java)
+                    val call = tokenClient.getRefreshToken(mToken.refreshToken,
+                            mToken.clientId, mToken.clientSecret, API_OAUTH_REDIRECT,
+                            "refresh_token")
+                    try {
+                        val tokenResponse = call.execute()
+                        if (tokenResponse.code() == 200) {
+                            val newToken = tokenResponse.body()
+                            mToken = newToken!!
+
+                            onRefreshedToken(newToken)
+
+                            return response.request().newBuilder()
+                                    .header("Authorization", newToken.tokenType + " " + newToken.accessToken)
+                                    .build()
+                        } else {
+                            return null
+                        }
+                    } catch (e: IOException) {
+                        return null
+                    }
+
+                }
+            })
+        }
+
+        val client = httpClient!!.build()
+        val retrofit = builder!!.client(client).build()
+        return retrofit.create(serviceClass)
+    }
+
+    private fun responseCount(response: Response): Int {
+        var response: Response? = response
+        var result = 1
+        while (response != null) {
+            response = response.priorResponse()
+            result++
+        }
+        return result
+    }
+}
