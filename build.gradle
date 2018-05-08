@@ -37,6 +37,8 @@ dependencies {
     compile 'com.squareup.retrofit2:retrofit:2.3.0'
     compile 'com.squareup.retrofit2:converter-gson:2.3.0'
 
+    compile 'io.swagger:swagger-codegen-cli:2.3.1'
+
     swaggerCodegen 'io.swagger:swagger-codegen-cli:2.3.0'
 }
 
@@ -44,7 +46,7 @@ swaggerSources {
     esi {
         inputFile = file("$projectDir/swagger.json")
         code {
-            language = 'kotlin'
+            language = 'generators.EsiGenerator'
             templateDir = file("$projectDir/template/")
             outputDir = file("$buildDir/swagger-esi/")
             components = ['models', 'apis']
