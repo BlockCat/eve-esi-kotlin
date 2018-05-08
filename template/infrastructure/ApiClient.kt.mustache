@@ -1,9 +1,10 @@
 package {{packageName}}.infrastructure
 
-import retrofit2.Call;
-import retrofit2.http.Field;
-import retrofit2.http.FormUrlEncoded;
-import retrofit2.http.POST;
+import retrofit2.Call
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
+import retrofit2.http.Header
+import retrofit2.http.POST
 
 
 interface APIClient {
@@ -11,20 +12,16 @@ interface APIClient {
     @FormUrlEncoded
     @POST("/oauth/token")
     fun getNewAccessToken(
+            @Header("Authorization") authorization: String,
             @Field("code") code: String,
-            @Field("client_id") clientId: String,
-            @Field("client_secret") client_secret: String,
-            @Field("redirect_uri") redirectUri: String,
             @Field("grant_type") grantType: String
     ): Call<AccessToken>
 
     @FormUrlEncoded
     @POST("/oauth/token")
     fun getRefreshToken (
+            @Header("Authorization") authorization: String,
             @Field("refresh_token") code: String,
-            @Field("client_id") clientId: String,
-            @Field("client_secret") client_secret: String,
-            @Field("redirect_uri") redirectUri: String,
             @Field("grant_type") grantType: String
     ): Call<AccessToken>
 }

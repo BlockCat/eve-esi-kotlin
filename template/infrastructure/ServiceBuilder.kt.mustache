@@ -2,19 +2,23 @@ package {{packageName}}.infrastructure
 
 import java.io.IOException
 
-import okhttp3.Authenticator
-import okhttp3.Interceptor
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.Route
+import okhttp3.*
+import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.*
 
-object ServiceGenerator {
+interface OAuthContext {
+    fun getClientId(): String
+    fun getClientSecret(): String
+	fun getAccessToken(): AccessToken?
+}
 
-    val API_BASE_URL = "https://api.example.com"
-    val API_OAUTH_REDIRECT = "nl.jpelgrm.retrofit2oauthrefresh://oauth"
+
+class ServiceBuilder {
+
+    val API_BASE_URL = "https://esi.evetech.net/latest/"
+    val API_OAUTH_URL = "https://login.eveonline.com"
 
     private var httpClient: OkHttpClient.Builder? = null
 
@@ -23,7 +27,35 @@ object ServiceGenerator {
     //private var mContext: Context? = null
     private lateinit var mToken: AccessToken
 
-    fun <S> createService(serviceClass: Class<S>): S {
+    fun OAuthContext.getAccessToken(code: String): Call<AccessToken> {
+        val service = createOAuthService()
+        val authorization = createAuthorization(this.getClientId(), this.getClientSecret())
+
+        return service.getNewAccessToken(
+            authorization = authorization,
+            code = code,
+            grantType = "authorization_code"
+        )
+    }
+
+    private fun createOAuthService(): APIClient {
+        val httpClient = OkHttpClient.Builder()
+        val builder = Retrofit.Builder()
+            .baseUrl(API_OAUTH_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+
+        val client = httpClient.build()
+        val retrofit = builder.client(client).build()
+        return retrofit.create(APIClient::class.java)
+    }
+
+    private fun createAuthorization(clientId: String, clientSecret: String): String {
+        var authentication = "$clientId:$clientSecret"
+        authentication = Base64.getEncoder().encodeToString(authentication.toByteArray())
+        return "Basic $authentication"
+    }
+
+    fun <S> OAuthContext.createService(serviceClass: Class<S>): S {
         httpClient = OkHttpClient.Builder()
         builder = Retrofit.Builder()
                 .baseUrl(API_BASE_URL)
@@ -34,14 +66,16 @@ object ServiceGenerator {
         return retrofit.create(serviceClass)
     }
 
-    fun <S> createService(serviceClass: Class<S>, accessToken: AccessToken?, onRefreshedToken: (AccessToken) -> Unit): S {
+    fun <S> OAuthContext.createService(serviceClass: Class<S>, accessToken: AccessToken?, onRefreshedToken: (AccessToken) -> Unit): S {
         httpClient = OkHttpClient.Builder()
         builder = Retrofit.Builder()
                 .baseUrl(API_BASE_URL)
                 .addConverterFactory(GsonConverterFactory.create())
 
-        if (accessToken != null) {
-            mToken = accessToken
+        val context = this
+
+        if (getAccessToken() != null) {
+            mToken = getAccessToken()!!
             httpClient!!.addInterceptor(object : Interceptor {
                 @Throws(IOException::class)
                 override fun intercept(chain: Interceptor.Chain): Response {
@@ -49,9 +83,8 @@ object ServiceGenerator {
 
                     val requestBuilder = original.newBuilder()
                             .header("Accept", "application/json")
-                            .header("Content-type", "application/json")
-                            .header("Authorization",
-                                    accessToken.tokenType + " " + accessToken.accessToken)
+                            .header("Content-type", "application/json")                            
+							.header("Authorization", "Bearer ${mToken.accessToken}")
                             .method(original.method(), original.body())
 
                     val request = requestBuilder.build()
@@ -69,10 +102,9 @@ object ServiceGenerator {
                     }
 
                     // We need a new client, since we don't want to make another call using our client with access token
-                    val tokenClient = createService(APIClient::class.java)
-                    val call = tokenClient.getRefreshToken(mToken.refreshToken,
-                            mToken.clientId, mToken.clientSecret, API_OAUTH_REDIRECT,
-                            "refresh_token")
+                    val tokenClient = createOAuthService()
+                    val authorization = createAuthorization(context.getClientId(), context.getClientSecret())
+                    val call = tokenClient.getRefreshToken(authorization, mToken.refreshToken, "refresh_token")
                     try {
                         val tokenResponse = call.execute()
                         if (tokenResponse.code() == 200) {
@@ -82,7 +114,7 @@ object ServiceGenerator {
                             onRefreshedToken(newToken)
 
                             return response.request().newBuilder()
-                                    .header("Authorization", newToken.tokenType + " " + newToken.accessToken)
+									.header("Authorization", "Bearer ${mToken.accessToken}")
                                     .build()
                         } else {
                             return null
