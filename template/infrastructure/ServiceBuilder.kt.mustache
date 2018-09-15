@@ -1,5 +1,4 @@
 package {{packageName}}.infrastructure
-
 import java.io.IOException
 
 import okhttp3.*
@@ -9,136 +8,143 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.*
 
 interface OAuthContext {
-    fun getClientId(): String
-    fun getClientSecret(): String
-	fun getAccessToken(): AccessToken?
+fun getClientId(): String
+fun getClientSecret(): String
+fun getAccessToken(): AccessToken?
+
+fun OnRefreshAccessToken(accessToken: AccessToken);
 }
 
 
 class ServiceBuilder {
 
-    val API_BASE_URL = "https://esi.evetech.net/latest/"
-    val API_OAUTH_URL = "https://login.eveonline.com"
 
-    private var httpClient: OkHttpClient.Builder? = null
+private var httpClient: OkHttpClient.Builder? = null
 
-    private var builder: Retrofit.Builder? = null
+private var builder: Retrofit.Builder? = null
 
-    //private var mContext: Context? = null
-    private lateinit var mToken: AccessToken
+//private var mContext: Context? = null
+private lateinit var mToken: AccessToken
 
-    fun OAuthContext.getAccessToken(code: String): Call<AccessToken> {
-        val service = createOAuthService()
-        val authorization = createAuthorization(this.getClientId(), this.getClientSecret())
 
-        return service.getNewAccessToken(
-            authorization = authorization,
-            code = code,
-            grantType = "authorization_code"
-        )
+
+private fun createOAuthService(): APIClient {
+val httpClient = OkHttpClient.Builder()
+val builder = Retrofit.Builder()
+.baseUrl(API_OAUTH_URL)
+.addConverterFactory(GsonConverterFactory.create())
+
+val client = httpClient.build()
+val retrofit = builder.client(client).build()
+return retrofit.create(APIClient::class.java)
+}
+
+private fun createAuthorization(clientId: String, clientSecret: String): String {
+var authentication = "$clientId:$clientSecret"
+authentication = Base64.getEncoder().encodeToString(authentication.toByteArray())
+return "Basic $authentication"
+}
+
+
+private fun responseCount(response: Response): Int {
+var response: Response? = response
+var result = 1
+while (response != null) {
+response = response.priorResponse()
+result++
+}
+return result
+}
+
+companion object {
+val API_BASE_URL = "https://esi.evetech.net/latest/"
+val API_OAUTH_URL = "https://login.eveonline.com"
+
+fun getAccessToken(code: String, context: OAuthContext): Call<AccessToken> {
+    val serviceBuilder = ServiceBuilder()
+    val service = serviceBuilder.createOAuthService()
+    val authorization = serviceBuilder.createAuthorization(context.getClientId(), context.getClientSecret())
+
+    return service.getNewAccessToken(
+    authorization = authorization,
+    code = code,
+    grantType = "authorization_code"
+    )
     }
 
-    private fun createOAuthService(): APIClient {
+    fun <S> createService(serviceClass: Class<S>): S {
         val httpClient = OkHttpClient.Builder()
         val builder = Retrofit.Builder()
-            .baseUrl(API_OAUTH_URL)
+        .baseUrl(API_BASE_URL)
+        .addConverterFactory(GsonConverterFactory.create())
+
+        val client = httpClient!!.build()
+        val retrofit = builder!!.client(client).build()
+        return retrofit.create(serviceClass)
+        }
+
+        fun <S> createService(serviceClass: Class<S>, context: OAuthContext): S {
+            val httpClient = OkHttpClient.Builder()
+            val builder = Retrofit.Builder()
+            .baseUrl(API_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
 
-        val client = httpClient.build()
-        val retrofit = builder.client(client).build()
-        return retrofit.create(APIClient::class.java)
-    }
 
-    private fun createAuthorization(clientId: String, clientSecret: String): String {
-        var authentication = "$clientId:$clientSecret"
-        authentication = Base64.getEncoder().encodeToString(authentication.toByteArray())
-        return "Basic $authentication"
-    }
-
-    fun <S> OAuthContext.createService(serviceClass: Class<S>): S {
-        httpClient = OkHttpClient.Builder()
-        builder = Retrofit.Builder()
-                .baseUrl(API_BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-
-        val client = httpClient!!.build()
-        val retrofit = builder!!.client(client).build()
-        return retrofit.create(serviceClass)
-    }
-
-    fun <S> OAuthContext.createService(serviceClass: Class<S>, accessToken: AccessToken?, onRefreshedToken: (AccessToken) -> Unit): S {
-        httpClient = OkHttpClient.Builder()
-        builder = Retrofit.Builder()
-                .baseUrl(API_BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-
-        val context = this
-
-        if (getAccessToken() != null) {
-            mToken = getAccessToken()!!
+            if (context.getAccessToken() != null) {
+            var mToken = context.getAccessToken()!!
             httpClient!!.addInterceptor(object : Interceptor {
-                @Throws(IOException::class)
-                override fun intercept(chain: Interceptor.Chain): Response {
-                    val original = chain.request()
+            @Throws(IOException::class)
+            override fun intercept(chain: Interceptor.Chain): Response {
+            val original = chain.request()
 
-                    val requestBuilder = original.newBuilder()
-                            .header("Accept", "application/json")
-                            .header("Content-type", "application/json")                            
-							.header("Authorization", "Bearer ${mToken.accessToken}")
-                            .method(original.method(), original.body())
+            val requestBuilder = original.newBuilder()
+            .header("Accept", "application/json")
+            .header("Content-type", "application/json")
+            .header("Authorization", "Bearer ${mToken.accessToken}")
+            .method(original.method(), original.body())
 
-                    val request = requestBuilder.build()
-                    return chain.proceed(request)
-                }
+            val request = requestBuilder.build()
+            return chain.proceed(request)
+            }
             })
 
-            httpClient!!.authenticator(object : Authenticator {
-                @Throws(IOException::class)
-                override fun authenticate(route: Route, response: Response): Request? {
-                    if (responseCount(response) >= 2) {
-                        // If both the original call and the call with refreshed token failed,
-                        // it will probably keep failing, so don't try again.
-                        return null
-                    }
+            val serviceBuilder = ServiceBuilder()
 
-                    // We need a new client, since we don't want to make another call using our client with access token
-                    val tokenClient = createOAuthService()
-                    val authorization = createAuthorization(context.getClientId(), context.getClientSecret())
-                    val call = tokenClient.getRefreshToken(authorization, mToken.refreshToken, "refresh_token")
-                    try {
-                        val tokenResponse = call.execute()
-                        if (tokenResponse.code() == 200) {
-                            val newToken = tokenResponse.body()
-                            mToken = newToken!!
+            httpClient!!.authenticator(Authenticator { route, response ->
+            if (serviceBuilder.responseCount(response) >= 2) {
+            // If both the original call and the call with refreshed token failed,
+            // it will probably keep failing, so don't try again.
+            return@Authenticator null
+            }
 
-                            onRefreshedToken(newToken)
+            // We need a new client, since we don't want to make another call using our client with access token
+            val tokenClient = serviceBuilder.createOAuthService()
+            val authorization = serviceBuilder.createAuthorization(context.getClientId(), context.getClientSecret())
 
-                            return response.request().newBuilder()
-									.header("Authorization", "Bearer ${mToken.accessToken}")
-                                    .build()
-                        } else {
-                            return null
-                        }
-                    } catch (e: IOException) {
-                        return null
-                    }
+            val call = tokenClient.getRefreshToken(authorization, mToken.refreshToken, "refresh_token")
+            try {
+            val tokenResponse = call.execute()
+            if (tokenResponse.code() == 200) {
+            val newToken = tokenResponse.body()
+            mToken = newToken!!
 
-                }
+            context.OnRefreshAccessToken(newToken)
+
+            return@Authenticator response.request().newBuilder()
+            .header("Authorization", "Bearer ${mToken.accessToken}")
+            .build()
+            } else {
+            return@Authenticator null
+            }
+            } catch (e: IOException) {
+            return@Authenticator null
+            }
             })
-        }
+            }
 
-        val client = httpClient!!.build()
-        val retrofit = builder!!.client(client).build()
-        return retrofit.create(serviceClass)
-    }
-
-    private fun responseCount(response: Response): Int {
-        var response: Response? = response
-        var result = 1
-        while (response != null) {
-            response = response.priorResponse()
-            result++
-        }
-        return result
-    }
-}
+            val client = httpClient!!.build()
+            val retrofit = builder!!.client(client).build()
+            return retrofit.create(serviceClass)
+            }
+            }
+            }
