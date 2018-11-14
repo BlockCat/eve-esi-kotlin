@@ -1,13 +1,8 @@
 group 'catdock.org'
 version '1.0.0'
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '3.3'
-    distributionUrl = "https://services.gradle.org/distributions/gradle-$gradleVersion-all.zip"
-}
-
 buildscript {
-    ext.kotlin_version = '1.2.41'
+    ext.kotlin_version = '1.2.71'
 
     repositories {
         mavenCentral()
@@ -30,33 +25,29 @@ repositories {
 }
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"        
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.3.0-rc-198"
     
     // Retrofit library
-    compile 'com.google.code.gson:gson:2.8.2'
-    compile 'com.squareup.retrofit2:retrofit:2.3.0'
-    compile 'com.squareup.retrofit2:converter-gson:2.3.0'
+    implementation 'com.google.code.gson:gson:2.8.5'
+    implementation 'com.squareup.retrofit2:retrofit:2.4.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.4.0'
 
-    compile 'io.swagger:swagger-codegen-cli:2.3.1'
+    implementation 'io.reactivex.rxjava2:rxjava:2.2.3'
 
-    swaggerCodegen 'io.swagger:swagger-codegen-cli:2.3.0'
+    swaggerCodegen 'io.swagger:swagger-codegen-cli:2.3.1'
 }
 
 swaggerSources {
     esi {
         inputFile = file("$projectDir/swagger.json")
         code {
-            language = 'generators.EsiGenerator'
+            language = 'kotlin'
             templateDir = file("$projectDir/template/")
-            outputDir = file("$buildDir/swagger-esi/")
+            outputDir = file("${rootProject.buildDir}/swagger-esi/")
             components = [
                     models: true,
                     apis: true,
-                    supportingFiles: [
-                            'ApiClient.kt',
-                            'AccessToken.kt',
-                            'ServiceBuilder.kt'
-                    ]
+                    supportingFiles: false
             ]
             dependsOn validation
             additionalProperties = [
@@ -72,10 +63,7 @@ swaggerSources {
     }
 }
 
-compileKotlin.dependsOn generateSwaggerCode
-
 sourceSets {
-    main {
-        java.srcDirs += "$buildDir/swagger-esi/src"
-    }
+    main.java.srcDirs += "${swaggerSources.esi.code.outputDir}/src/main/kotlin"
 }
+compileKotlin.dependsOn generateSwaggerCode

@@ -7,6 +7,7 @@ package {{apiPackage}}
 
 import retrofit2.Call
 import retrofit2.http.*
+import io.reactivex.Observable
 
 {{#operations}}
 public interface {{classname}} {
@@ -17,7 +18,7 @@ public interface {{classname}} {
 {{#allParams}}
    * @param {{paramName}} {{description}}{{#required}} (required){{/required}}{{^required}} (optional{{#defaultValue}}, default to {{{.}}}{{/defaultValue}}){{/required}}
 {{/allParams}}
-   * @return Call&lt;{{#returnType}}{{returnType}}{{/returnType}}{{^returnType}}Any{{/returnType}}&gt;
+   * @return Observable&lt;{{#returnType}}{{returnType}}{{/returnType}}{{^returnType}}Any{{/returnType}}&gt;
 {{#externalDocs}}
    * {{description}}
    * @see <a href="{{url}}">{{summary}} Documentation</a>
@@ -40,7 +41,7 @@ public interface {{classname}} {
   @{{httpMethod}}("{{basePathWithoutHost}}{{{path}}}")
   fun {{operationId}}({{^allParams}}){{/allParams}}
     {{#allParams}}{{>queryParams}}{{>pathParams}}{{>headerParams}}{{>bodyParams}}{{>formParams}}{{#hasMore}}, {{/hasMore}}{{^hasMore}}
-  ){{/hasMore}}{{/allParams}}:Call<{{#isResponseFile}}ResponseBody{{/isResponseFile}}{{^isResponseFile}}{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}Any{{/returnType}}{{/isResponseFile}}>
+  ){{/hasMore}}{{/allParams}}:Observable<{{#isResponseFile}}ResponseBody{{/isResponseFile}}{{^isResponseFile}}{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}Any{{/returnType}}{{/isResponseFile}}>
 
   {{/operation}}
 }
